@@ -185,10 +185,13 @@
         <strong>Panelin çalışması için adres çubuğunda http://127.0.0.1:5000 olmalı</strong> — HTML dosyasını doğrudan açmak işe yaramaz.
       </p>
 
-      <div id="last-errors" class="flash flash-error" style="display: {% if category_last_error or patent_last_error %}block{% else %}none{% endif %};">
+      <div id="last-errors" class="flash flash-error" style="display: {% if category_last_error or patent_last_error or eleyici_last_error or tescilsiz_last_error %}block{% else %}none{% endif %};">
         {% if category_last_error %}category_finder: {{ category_last_error }}{% endif %}
         {% if category_last_error and patent_last_error %}<br />{% endif %}
         {% if patent_last_error %}patent_worker: {{ patent_last_error }}{% endif %}
+        {% if (category_last_error or patent_last_error) and eleyici_last_error %}<br />{% endif %}
+        {% if eleyici_last_error %}eleyici: {{ eleyici_last_error }}{% endif %}
+        {% if tescilsiz_last_error %}<br />tescilsiz_maker: {{ tescilsiz_last_error }}{% endif %}
       </div>
 
       <div style="margin-top: 8px;">
@@ -203,6 +206,10 @@
         <span class="pill {% if has_tescilsiz %}pill-ok{% else %}pill-muted{% endif %}">
           Tescilsiz:
           {% if has_tescilsiz %}Tescilsiz.xlsx hazır{% else %}henüz oluşturulmadı{% endif %}
+        </span>
+        <span class="pill {% if has_elenmis %}pill-ok{% else %}pill-muted{% endif %}">
+          Elenmis:
+          {% if has_elenmis %}elenmis.xlsx hazır{% else %}henüz oluşturulmadı{% endif %}
         </span>
       </div>
 
@@ -361,6 +368,84 @@
             </a>
           </div>
         </div>
+
+        <div class="card">
+          <div class="section-title">tescilsiz_maker.py</div>
+          <p class="muted">
+            <code>output.xlsx</code>'teki patent bulunamayan markaları süzerek
+            <code>Tescilsiz.xlsx</code>'e Trendyol linki ile yazar.
+          </p>
+          <p>
+            Durum:
+            {% if tescilsiz_running %}
+              <span class="status-badge status-running">Çalışıyor</span>
+            {% else %}
+              <span class="status-badge status-idle">Beklemede</span>
+            {% endif %}
+          </p>
+          <p class="muted" id="tescilsiz-progress-text">İlerleme bilgisi yükleniyor…</p>
+          <div class="progress-shell">
+            <div class="progress-bar" id="tescilsiz-progress-bar"></div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="run_tescilsiz" />
+              <button class="btn btn-secondary" type="submit" {% if tescilsiz_running %}disabled{% endif %}>
+                Başlat
+              </button>
+            </form>
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="stop_tescilsiz" />
+              <button class="btn btn-danger" type="submit" {% if not tescilsiz_running %}disabled{% endif %}>
+                Durdur
+              </button>
+            </form>
+          </div>
+          <div style="margin-top: 8px;">
+            <a href="{{ url_for('download_tescilsiz') }}" class="btn btn-secondary" style="text-decoration: none;">
+              Tescilsiz.xlsx'i indir
+            </a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">eleyici.py</div>
+          <p class="muted">
+            Tescilsiz.xlsx'teki markaların Trendyol'daki en çok satanlarına bakarak değerlendirme sayısı
+            ve puanını çeker, sonucu <code>elenmis.xlsx</code> dosyasına yazar.
+          </p>
+          <p>
+            Durum:
+            {% if eleyici_running %}
+              <span class="status-badge status-running">Çalışıyor</span>
+            {% else %}
+              <span class="status-badge status-idle">Beklemede</span>
+            {% endif %}
+          </p>
+          <p class="muted" id="eleyici-progress-text">İlerleme bilgisi yükleniyor…</p>
+          <div class="progress-shell">
+            <div class="progress-bar" id="eleyici-progress-bar"></div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="run_eleyici" />
+              <button class="btn btn-secondary" type="submit" {% if eleyici_running %}disabled{% endif %}>
+                Başlat
+              </button>
+            </form>
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="stop_eleyici" />
+              <button class="btn btn-danger" type="submit" {% if not eleyici_running %}disabled{% endif %}>
+                Durdur
+              </button>
+            </form>
+          </div>
+          <div style="margin-top: 8px;">
+            <a href="{{ url_for('download_elenmis') }}" class="btn btn-secondary" style="text-decoration: none;">
+              elenmis.xlsx'i indir
+            </a>
+          </div>
+        </div>
       </div>
 
       <hr style="border-color: #111827; margin: 24px 0;" />
@@ -374,6 +459,14 @@
           <div class="section-title">Canlı Log - patent_worker</div>
           <pre class="log-viewer" id="log-patent">Yükleniyor…</pre>
         </div>
+        <div class="card">
+          <div class="section-title">Canlı Log - eleyici</div>
+          <pre class="log-viewer" id="log-eleyici">Yükleniyor…</pre>
+        </div>
+        <div class="card">
+          <div class="section-title">Canlı Log - tescilsiz_maker</div>
+          <pre class="log-viewer" id="log-tescilsiz">Yükleniyor…</pre>
+        </div>
       </div>
     </div>
     <script>
@@ -385,24 +478,34 @@
 
           const cat = data.category || {};
           const pat = data.patent || {};
-          updateButtons({ category: cat.running, patent: pat.running });
+          const el = data.eleyici || {};
+          const ts = data.tescilsiz || {};
+          updateButtons({ category: cat.running, patent: pat.running, eleyici: el.running, tescilsiz: ts.running });
 
           const errDiv = document.getElementById("last-errors");
           if (errDiv) {
             const msgs = [];
             if (cat.last_error) msgs.push("category_finder: " + cat.last_error);
             if (pat.last_error) msgs.push("patent_worker: " + pat.last_error);
+            if (el.last_error) msgs.push("eleyici: " + el.last_error);
+            if (ts.last_error) msgs.push("tescilsiz_maker: " + ts.last_error);
             errDiv.innerHTML = msgs.length ? msgs.join("<br>") : "";
             errDiv.style.display = msgs.length ? "block" : "none";
           }
 
           const catProg = cat.progress || {};
           const patProg = pat.progress || {};
+          const elProg = el.progress || {};
+          const tsProg = ts.progress || {};
 
           const catText = document.getElementById("category-progress-text");
           const catBar = document.getElementById("category-progress-bar");
           const patText = document.getElementById("patent-progress-text");
           const patBar = document.getElementById("patent-progress-bar");
+          const elText = document.getElementById("eleyici-progress-text");
+          const elBar = document.getElementById("eleyici-progress-bar");
+          const tsText = document.getElementById("tescilsiz-progress-text");
+          const tsBar = document.getElementById("tescilsiz-progress-bar");
 
           if (catProg.start !== null && catProg.end !== null) {
             const total = Math.max(0, catProg.end - catProg.start);
@@ -442,6 +545,28 @@
             patText.textContent = "Henüz çalıştırılmadı.";
             patBar.style.width = "0%";
           }
+
+          if (elProg.total || elProg.processed) {
+            const elTotal = elProg.total || 0;
+            const elDone = elProg.processed || 0;
+            const elPct = elTotal ? Math.min(100, Math.round((elDone / elTotal) * 100)) : 0;
+            elText.textContent = "Markalar: " + elDone + " / " + elTotal;
+            elBar.style.width = elPct + "%";
+          } else {
+            elText.textContent = "Henüz çalıştırılmadı.";
+            elBar.style.width = "0%";
+          }
+
+          if (tsProg.total || tsProg.processed) {
+            const tsTotal = tsProg.total || 0;
+            const tsDone = tsProg.processed || 0;
+            const tsPct = tsTotal ? Math.min(100, Math.round((tsDone / tsTotal) * 100)) : 0;
+            tsText.textContent = "Markalar: " + tsDone + " / " + tsTotal;
+            tsBar.style.width = tsPct + "%";
+          } else {
+            tsText.textContent = "Henüz çalıştırılmadı.";
+            tsBar.style.width = "0%";
+          }
         } catch (e) {
           // sessizce yut
         }
@@ -458,9 +583,21 @@
 
           const catLines = data.category || [];
           const patLines = data.patent || [];
+          const elLines = data.eleyici || [];
 
           catLogEl.textContent = catLines.length ? catLines.join("\\n") : "Henüz log yok.";
           patLogEl.textContent = patLines.length ? patLines.join("\\n") : "Henüz log yok.";
+
+          const elLogEl = document.getElementById("log-eleyici");
+          if (elLogEl) {
+            elLogEl.textContent = elLines.length ? elLines.join("\\n") : "Henüz log yok.";
+          }
+
+          const tsLines = data.tescilsiz || [];
+          const tsLogEl = document.getElementById("log-tescilsiz");
+          if (tsLogEl) {
+            tsLogEl.textContent = tsLines.length ? tsLines.join("\\n") : "Henüz log yok.";
+          }
         } catch (e) {
           // sessizce yut
         }
@@ -478,11 +615,19 @@
         const catStop = document.querySelector('form input[value="stop_category"]')?.closest('form')?.querySelector('button');
         const patStart = document.querySelector('form input[value="run_patent"]')?.closest('form')?.querySelector('button');
         const patStop = document.querySelector('form input[value="stop_patent"]')?.closest('form')?.querySelector('button');
+        const elStart = document.querySelector('form input[value="run_eleyici"]')?.closest('form')?.querySelector('button');
+        const elStop = document.querySelector('form input[value="stop_eleyici"]')?.closest('form')?.querySelector('button');
+        const tmStart = document.querySelector('form input[value="run_tescilsiz"]')?.closest('form')?.querySelector('button');
+        const tmStop = document.querySelector('form input[value="stop_tescilsiz"]')?.closest('form')?.querySelector('button');
 
         if (catStart) catStart.disabled = running.category;
         if (catStop) catStop.disabled = !running.category;
         if (patStart) patStart.disabled = running.patent;
         if (patStop) patStop.disabled = !running.patent;
+        if (elStart) elStart.disabled = running.eleyici;
+        if (elStop) elStop.disabled = !running.eleyici;
+        if (tmStart) tmStart.disabled = running.tescilsiz;
+        if (tmStop) tmStop.disabled = !running.tescilsiz;
       }
 
       if (document.readyState === "complete" || document.readyState === "interactive") {

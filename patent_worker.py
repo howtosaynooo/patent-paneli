@@ -22,16 +22,14 @@ BASE_URL = "https://apigw.trendyol.com"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 CATEGORIES_FILE = os.path.join(CACHE_DIR, "categories_with_products.txt")
-VISITED_FILE = os.path.join(CACHE_DIR, "visited_brands.txt")
 OUTPUT_EXCEL = os.path.join(BASE_DIR, "output.xlsx")
-TESCILSIZ_EXCEL = os.path.join(BASE_DIR, "Tescilsiz.xlsx")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 
 NUM_WORKERS = 10
 UPDATE_INTERVAL = 10  # Kaç kayıt biriktirince Excel'e yazılacak
-DRIVER_RESTART_INTERVAL = 10  # Her kaç sorguda bir driver yeniden başlatılsın
 
-visited_brands: set = set()
+
+visited_brands = set()
 visited_lock = Lock()
 
 # Durdurma isteği; panel "Durdur" tıklanınca True yapar
@@ -73,35 +71,6 @@ session.mount("https://", adapter)
 session.mount("http://", adapter)
 
 
-def load_visited_brands() -> set:
-    """Daha önce sorgulanmış marka adlarını diskten yükle."""
-    brands = set()
-    if not os.path.exists(VISITED_FILE):
-        return brands
-    try:
-        with open(VISITED_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                name = line.strip()
-                if name:
-                    brands.add(name)
-    except OSError:
-        pass
-    return brands
-
-
-def save_visited_brands() -> None:
-    """Ziyaret edilen markaları diske kaydet."""
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    try:
-        with visited_lock:
-            snapshot = set(visited_brands)
-        with open(VISITED_FILE, "w", encoding="utf-8") as f:
-            for name in snapshot:
-                f.write(name + "\n")
-    except OSError:
-        pass
-
-
 def load_categories(path: str = CATEGORIES_FILE) -> list[tuple[int, str]]:
     if not os.path.exists(path):
         log(f"Kategori cache dosyası bulunamadı: {path}")
@@ -133,20 +102,6 @@ def load_categories(path: str = CATEGORIES_FILE) -> list[tuple[int, str]]:
     return out
 
 
-def trendyol_link(brand_name: str) -> str:
-    from urllib.parse import quote
-    encoded = quote(brand_name, safe="")
-    return f"https://www.trendyol.com/sr?q={encoded}&qt={encoded}&st={encoded}&os=1"
-
-
-def _load_existing_brands(ws) -> set:
-    brands = set()
-    for row in ws.iter_rows(min_row=2, max_col=1, values_only=True):
-        if row[0]:
-            brands.add(str(row[0]))
-    return brands
-
-
 def excel_export(names, answers, category_ids):
     file_path = OUTPUT_EXCEL
     file_exists = os.path.exists(file_path)
@@ -159,41 +114,11 @@ def excel_export(names, answers, category_ids):
         ws = wb.active
         ws.append(["Marka", "Patent Var mı?", "Kategori ID"])
 
-    existing = _load_existing_brands(ws)
-    added = 0
     for n, a, c in zip(names, answers, category_ids):
-        if n not in existing:
-            ws.append([n, a, c])
-            existing.add(n)
-            added += 1
+        ws.append([n, a, c])
 
     wb.save(file_path)
-    log(f"output.xlsx güncellendi ({added} yeni kayıt).")
-
-
-def excel_export_tescilsiz(names, answers, category_ids):
-    """Patent bulunamayan markaları Tescilsiz.xlsx'e yazar (mükerrer önlenmiş)."""
-    file_path = TESCILSIZ_EXCEL
-    file_exists = os.path.exists(file_path)
-
-    if file_exists:
-        wb = load_workbook(file_path)
-        ws = wb.active
-    else:
-        wb = Workbook()
-        ws = wb.active
-        ws.append(["Marka", "Kategori ID", "Trendyol Link"])
-
-    existing = _load_existing_brands(ws)
-    added = 0
-    for n, a, c in zip(names, answers, category_ids):
-        if not a and n not in existing:
-            ws.append([n, c, trendyol_link(n)])
-            existing.add(n)
-            added += 1
-
-    wb.save(file_path)
-    log(f"Tescilsiz.xlsx güncellendi ({added} yeni kayıt).")
+    log("Excel dosyası başarıyla güncellendi.")
 
 
 def random_sleep(min_seconds=0.3, max_seconds=0.8):
@@ -205,11 +130,14 @@ def close_popup(driver):
         popup_button = WebDriverWait(driver, 5).until(
             EC.element_to_be_clickable((By.XPATH, '//*[@id="__next"]/div/section/div/span'))
         )
+
         driver.execute_script("arguments[0].scrollIntoView(true);", popup_button)
         random_sleep()
+
         popup_button.click()
         log("Pop-up kapatıldı.")
         random_sleep()
+
     except TimeoutException:
         log("Pop-up bulunamadı, devam ediliyor...")
     except Exception as e:
@@ -221,19 +149,20 @@ def get_products_from_top_ranking(params):
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
         "Accept": "application/json, text/plain, */*",
     }
+
     url = "/discovery-web-websfxcategorytopranking-santral/topRankingContents"
     full_url = f"{BASE_URL}{url}"
+
     response = session.get(full_url, headers=headers, params=params, timeout=15)
     response.raise_for_status()
     return response.json().get("result", {})
 
 
-def ask_for_patent(driver, brand_name, skip_popup=False):
+def ask_for_patent(driver, brand_name):
     isExist = False
     try:
         driver.get("https://www.turkpatent.gov.tr/arastirma-yap")
-        if not skip_popup:
-            close_popup(driver)
+        close_popup(driver)
         random_sleep()
 
         WebDriverWait(driver, 10).until(
@@ -241,6 +170,7 @@ def ask_for_patent(driver, brand_name, skip_popup=False):
         )
 
         input_field = driver.find_element(By.XPATH, '//input[@placeholder="Marka Adı"]')
+
         driver.execute_script("arguments[0].scrollIntoView(true);", input_field)
         random_sleep()
         input_field.send_keys(brand_name)
@@ -253,6 +183,7 @@ def ask_for_patent(driver, brand_name, skip_popup=False):
 
         radio_button = driver.find_element(By.XPATH, '//input[@class="jss45" and @value="isEqual"]')
 
+        # Radio buton tıklamasında ara sıra overlay çakışması olabiliyor; birkaç kez yeniden dene
         clicked = False
         for attempt in range(3):
             try:
@@ -303,58 +234,52 @@ def create_driver():
     return webdriver.Firefox(options=options)
 
 
-def worker_task(brands, results, category_id):
-    """Her worker kendi driver'ını yönetir; her DRIVER_RESTART_INTERVAL sorguda bir yeniden başlatır."""
-    driver = create_driver()
-    query_count = 0
-
+def process_brands(brands, results, category_id):
     for brand in brands:
         if STOP_REQUESTED:
-            break
-
+            return
         with visited_lock:
             if brand in visited_brands:
                 continue
             visited_brands.add(brand)
 
-        # Her DRIVER_RESTART_INTERVAL sorguda driver'ı yeniden başlat
-        if query_count > 0 and query_count % DRIVER_RESTART_INTERVAL == 0:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+        for attempt in range(3):
             driver = create_driver()
+            try:
+                isExist = ask_for_patent(driver, brand)
+                break
+            except Exception as e:
+                log(f"{brand}: Driver hatası (deneme {attempt+1}/3): {e}")
+                isExist = False
+            finally:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+            random_sleep(1, 2)
 
-        # Popup sadece fresh driver'da kapat (ilk sorgu veya restart sonrası)
-        skip_popup = (query_count % DRIVER_RESTART_INTERVAL != 0)
-
-        isExist = ask_for_patent(driver, brand, skip_popup=skip_popup)
         results.append((brand, isExist, category_id))
         PROGRESS["processed_brands"] += 1
-        query_count += 1
-
-    try:
-        driver.quit()
-    except Exception:
-        pass
 
 
 def distribute_brands(brands, max_workers):
     n = len(brands)
     if n == 0:
         return []
+
     worker_count = min(max_workers, n)
     chunk_size = (n + worker_count - 1) // worker_count
-    return [brands[i * chunk_size: (i + 1) * chunk_size] for i in range(worker_count)]
+
+    distributed = [
+        brands[i * chunk_size : (i + 1) * chunk_size]
+        for i in range(worker_count)
+    ]
+    return distributed
 
 
 def main():
-    global STOP_REQUESTED, visited_brands
+    global STOP_REQUESTED
     STOP_REQUESTED = False
-
-    # Daha önce sorgulananları diskten yükle
-    visited_brands = load_visited_brands()
-    log(f"Daha önce sorgulanmış {len(visited_brands)} marka yüklendi.")
 
     category_pairs = load_categories()
     if not category_pairs:
@@ -392,36 +317,41 @@ def main():
                 continue
 
             if res and "contents" in res and len(res["contents"]) > 0:
-                brands = list({con["brand"]["name"] for con in res["contents"]})
+                contents = res["contents"]
+                brands = list({con["brand"]["name"] for con in contents})
 
                 if not brands:
                     log(f"Kategori {categoryId} (gender={gender}) için marka bulunamadı.")
                     continue
 
-                # Gerçek ihtiyaca göre worker sayısını belirle
-                worker_count = min(NUM_WORKERS, len(brands))
-                distributed = distribute_brands(brands, worker_count)
+                distributed = distribute_brands(brands, NUM_WORKERS)
+                worker_count = len(distributed)
                 results = [[] for _ in range(worker_count)]
 
                 with ThreadPoolExecutor(max_workers=worker_count) as executor:
                     futures = [
-                        executor.submit(worker_task, distributed[i], results[i], categoryId)
+                        executor.submit(
+                            process_brands,
+                            distributed[i],
+                            results[i],
+                            categoryId,
+                        )
                         for i in range(worker_count)
                     ]
+
                     for future in as_completed(futures):
                         future.result()
 
-                for result_list in results:
-                    for brand, isExist, cid in result_list:
+                for result in results:
+                    for brand, isExist, cid in result:
                         names.append(brand)
                         answers.append(isExist)
+                        # Kategori ID'yi gender ile birlikte yaz (ör. "55-1")
                         cat_ids.append(f"{cid}-{gender}")
                         update_counter += 1
 
                         if update_counter % UPDATE_INTERVAL == 0:
                             excel_export(names, answers, cat_ids)
-                            excel_export_tescilsiz(names, answers, cat_ids)
-                            save_visited_brands()
                             names, answers, cat_ids = [], [], []
 
                 log(f"Kategori {categoryId} (gender={gender}) için sorgulama tamamlandı.")
@@ -431,8 +361,7 @@ def main():
     finally:
         if names or answers:
             excel_export(names, answers, cat_ids)
-            excel_export_tescilsiz(names, answers, cat_ids)
-        save_visited_brands()
+
         log("Patent sorgulama işlemi tamamlandı.")
 
 

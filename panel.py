@@ -12,6 +12,8 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 OUTPUT_EXCEL = os.path.join(BASE_DIR, "output.xlsx")
 TESCILSIZ_EXCEL = os.path.join(BASE_DIR, "Tescilsiz.xlsx")
+ELENMIS_EXCEL = os.path.join(BASE_DIR, "elenmis.xlsx")
+TESCILSIZ_MAKER_LOG = os.path.join(LOGS_DIR, "tescilsiz_maker.log")
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -60,10 +62,16 @@ app.secret_key = "change-this-in-production"
 
 category_thread: threading.Thread | None = None
 patent_thread: threading.Thread | None = None
+eleyici_thread: threading.Thread | None = None
+tescilsiz_thread: threading.Thread | None = None
 category_running = False
 patent_running = False
+eleyici_running = False
+tescilsiz_running = False
 category_last_error: str | None = None
 patent_last_error: str | None = None
+eleyici_last_error: str | None = None
+tescilsiz_last_error: str | None = None
 
 
 def run_category_finder():
@@ -115,9 +123,52 @@ def run_patent_worker():
         patent_running = False
 
 
+def run_tescilsiz_maker():
+    global tescilsiz_running, tescilsiz_last_error
+    tescilsiz_last_error = None
+    try:
+        import tescilsiz_maker as tm
+
+        tm.STOP_REQUESTED = False
+        tm.main()
+    except OSError as e:
+        if e.errno == 5:
+            tescilsiz_last_error = (
+                "Dosya okuma/yazma hatası. Proje klasörü iCloud veya Dropbox içindeyse taşı."
+            )
+        else:
+            tescilsiz_last_error = str(e)
+    except Exception as e:
+        tescilsiz_last_error = str(e)
+    finally:
+        tescilsiz_running = False
+
+
+def run_eleyici():
+    global eleyici_running, eleyici_last_error
+    eleyici_last_error = None
+    try:
+        import eleyici as el
+
+        el.STOP_REQUESTED = False
+        el.main()
+    except OSError as e:
+        if e.errno == 5:
+            eleyici_last_error = (
+                "Dosya okuma/yazma hatası. Proje klasörü iCloud veya Dropbox içindeyse taşı: "
+                "Projeyi Masaüstü (~/Desktop) veya yerel bir klasöre kopyala, oradan çalıştır."
+            )
+        else:
+            eleyici_last_error = str(e)
+    except Exception as e:
+        eleyici_last_error = str(e)
+    finally:
+        eleyici_running = False
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
-    global category_thread, patent_thread, category_running, patent_running
+    global category_thread, patent_thread, eleyici_thread, tescilsiz_thread, category_running, patent_running, eleyici_running, tescilsiz_running
     cfg = load_config()
 
     if request.method == "POST":
@@ -184,21 +235,61 @@ def index():
             flash("patent_worker durduruluyor… (birkaç saniye sürebilir)", "success")
             return redirect(url_for("index"))
 
+        if action == "run_tescilsiz" and not tescilsiz_running:
+            if not os.path.exists(OUTPUT_EXCEL):
+                flash("Tescilsiz Maker için önce output.xlsx oluşturulmalı (patent_worker çalıştır).", "error")
+                return redirect(url_for("index"))
+            tescilsiz_running = True
+            tescilsiz_thread = threading.Thread(target=run_tescilsiz_maker, daemon=True)
+            tescilsiz_thread.start()
+            flash("tescilsiz_maker çalıştırıldı.", "success")
+            return redirect(url_for("index"))
+
+        if action == "stop_tescilsiz" and tescilsiz_running:
+            import tescilsiz_maker as tm
+
+            tm.STOP_REQUESTED = True
+            flash("tescilsiz_maker durduruluyor…", "success")
+            return redirect(url_for("index"))
+
+        if action == "run_eleyici" and not eleyici_running:
+            if not os.path.exists(TESCILSIZ_EXCEL):
+                flash("Eleyici için önce Tescilsiz.xlsx oluşturulmalı (patent_worker çalıştır).", "error")
+                return redirect(url_for("index"))
+            eleyici_running = True
+            eleyici_thread = threading.Thread(target=run_eleyici, daemon=True)
+            eleyici_thread.start()
+            flash("eleyici çalıştırıldı.", "success")
+            return redirect(url_for("index"))
+
+        if action == "stop_eleyici" and eleyici_running:
+            import eleyici as el
+
+            el.STOP_REQUESTED = True
+            flash("eleyici durduruluyor… (birkaç saniye sürebilir)", "success")
+            return redirect(url_for("index"))
+
     # Basit health bilgileri
     gecko_ok = bool(shutil.which("geckodriver")) if hasattr(shutil, "which") else False
     has_excel = os.path.exists(OUTPUT_EXCEL)
     has_tescilsiz = os.path.exists(TESCILSIZ_EXCEL)
+    has_elenmis = os.path.exists(ELENMIS_EXCEL)
 
     return render_template(
         "panel.html",
         config=cfg,
         category_running=category_running,
         patent_running=patent_running,
+        eleyici_running=eleyici_running,
+        tescilsiz_running=tescilsiz_running,
+        tescilsiz_last_error=tescilsiz_last_error,
         gecko_ok=gecko_ok,
         has_excel=has_excel,
         has_tescilsiz=has_tescilsiz,
+        has_elenmis=has_elenmis,
         category_last_error=category_last_error,
         patent_last_error=patent_last_error,
+        eleyici_last_error=eleyici_last_error,
     )
 
 
@@ -218,6 +309,20 @@ def status():
     except Exception:
         pat_progress = None
 
+    try:
+        import eleyici as el
+
+        el_progress = getattr(el, "PROGRESS", None)
+    except Exception:
+        el_progress = None
+
+    try:
+        import tescilsiz_maker as tm
+
+        tm_progress = getattr(tm, "PROGRESS", None)
+    except Exception:
+        tm_progress = None
+
     data: Dict[str, Any] = {
         "category": {
             "running": category_running,
@@ -229,6 +334,16 @@ def status():
             "progress": pat_progress,
             "last_error": patent_last_error,
         },
+        "eleyici": {
+            "running": eleyici_running,
+            "progress": el_progress,
+            "last_error": eleyici_last_error,
+        },
+        "tescilsiz": {
+            "running": tescilsiz_running,
+            "progress": tm_progress,
+            "last_error": tescilsiz_last_error,
+        },
     }
     return jsonify(data)
 
@@ -237,10 +352,14 @@ def status():
 def logs():
     category_log = read_log_tail(os.path.join(LOGS_DIR, "category_finder.log"), max_lines=80)
     patent_log = read_log_tail(os.path.join(LOGS_DIR, "patent_worker.log"), max_lines=80)
+    eleyici_log = read_log_tail(os.path.join(LOGS_DIR, "eleyici.log"), max_lines=80)
+    tescilsiz_log = read_log_tail(os.path.join(LOGS_DIR, "tescilsiz_maker.log"), max_lines=80)
     return jsonify(
         {
             "category": category_log,
             "patent": patent_log,
+            "eleyici": eleyici_log,
+            "tescilsiz": tescilsiz_log,
         }
     )
 
@@ -259,6 +378,14 @@ def download_tescilsiz():
         flash("Henüz Tescilsiz.xlsx oluşturulmadı.", "error")
         return redirect(url_for("index"))
     return send_file(TESCILSIZ_EXCEL, as_attachment=True)
+
+
+@app.route("/download/elenmis.xlsx")
+def download_elenmis():
+    if not os.path.exists(ELENMIS_EXCEL):
+        flash("Henüz elenmis.xlsx oluşturulmadı.", "error")
+        return redirect(url_for("index"))
+    return send_file(ELENMIS_EXCEL, as_attachment=True)
 
 
 if __name__ == "__main__":
