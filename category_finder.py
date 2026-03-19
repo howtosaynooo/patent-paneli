@@ -98,6 +98,7 @@ def main(start=1, end=100000):
 
     seen = _load_seen_pairs()
     total = max(0, PROGRESS["end"] - PROGRESS["start"])
+    PROGRESS["found_count"] = len(seen)  # önceki çalışmadan kalan çiftleri say
 
     log(f"Kategori taraması başladı: [{PROGRESS['start']}, {PROGRESS['end']}) - daha önce bulunan çift sayısı: {len(seen)}")
 
