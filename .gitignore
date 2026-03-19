@@ -1,0 +1,9 @@
+.venv/
+cache/
+output.xlsx
+Tescilsiz.xlsx
+logs/
+__pycache__/
+*.pyc
+config.json
+.DS_Store

@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Patent Çalıştırma Paneli</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 960px;
+        margin: 32px auto;
+        padding: 24px;
+        background: #020617;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        border: 1px solid #1f2937;
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 24px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .card {
+        background: #020617;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #111827;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        color: #9ca3af;
+        margin-bottom: 4px;
+      }
+      input[type="text"],
+      input[type="number"] {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background 0.15s ease, transform 0.05s ease;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #3b82f6, #06b6d4);
+        color: white;
+      }
+      .btn-secondary {
+        background: #111827;
+        color: #e5e7eb;
+      }
+      .btn-danger {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.5);
+      }
+      .btn-danger:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.35);
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+      .section-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+      }
+      .status-running {
+        background: rgba(34, 197, 94, 0.1);
+        color: #4ade80;
+      }
+      .status-idle {
+        background: rgba(148, 163, 184, 0.1);
+        color: #9ca3af;
+      }
+      .muted {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .flash {
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+      .flash-success {
+        background: rgba(34, 197, 94, 0.1);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+      }
+      .flash-error {
+        background: rgba(248, 113, 113, 0.1);
+        color: #fca5a5;
+        border: 1px solid rgba(248, 113, 113, 0.3);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid #1f2937;
+        background: #020617;
+        margin-right: 6px;
+      }
+      .pill-ok {
+        border-color: rgba(34, 197, 94, 0.6);
+        color: #4ade80;
+      }
+      .pill-warn {
+        border-color: rgba(250, 204, 21, 0.6);
+        color: #facc15;
+      }
+      .pill-muted {
+        color: #9ca3af;
+      }
+      .progress-shell {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: #020617;
+        border: 1px solid #111827;
+        overflow: hidden;
+        margin-top: 6px;
+      }
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #3b82f6, #22c55e);
+        transition: width 0.3s ease;
+      }
+      pre.log-viewer {
+        background: #020617;
+        border-radius: 8px;
+        border: 1px solid #111827;
+        padding: 8px 10px;
+        font-size: 11px;
+        max-height: 220px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Patent Çalıştırma Paneli</h1>
+      <p class="muted">
+        Trendyol kategori + gender taraması ve Türk Patent marka sorgusunu bu panelden yönetebilirsin.
+        <strong>Panelin çalışması için adres çubuğunda http://127.0.0.1:5000 olmalı</strong> — HTML dosyasını doğrudan açmak işe yaramaz.
+      </p>
+
+      <div id="last-errors" class="flash flash-error" style="display: {% if category_last_error or patent_last_error %}block{% else %}none{% endif %};">
+        {% if category_last_error %}category_finder: {{ category_last_error }}{% endif %}
+        {% if category_last_error and patent_last_error %}<br />{% endif %}
+        {% if patent_last_error %}patent_worker: {{ patent_last_error }}{% endif %}
+      </div>
+
+      <div style="margin-top: 8px;">
+        <span class="pill {% if gecko_ok %}pill-ok{% else %}pill-warn{% endif %}">
+          Firefox / geckodriver:
+          {% if gecko_ok %}hazır{% else %}eksik - lütfen sistemine kur{% endif %}
+        </span>
+        <span class="pill {% if has_excel %}pill-ok{% else %}pill-muted{% endif %}">
+          Çıktı dosyası:
+          {% if has_excel %}output.xlsx hazır{% else %}henüz oluşturulmadı{% endif %}
+        </span>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="post">
+        <input type="hidden" name="action" value="save_config" />
+
+        <div class="grid">
+          <div class="card">
+            <div class="section-title">Kategori Aralığı</div>
+            <label for="category_start">Başlangıç ID</label>
+            <input
+              type="number"
+              id="category_start"
+              name="category_start"
+              value="{{ config.category_start }}"
+              min="1"
+            />
+
+            <label for="category_end" style="margin-top: 8px;">Bitiş ID</label>
+            <input
+              type="number"
+              id="category_end"
+              name="category_end"
+              value="{{ config.category_end }}"
+              min="1"
+            />
+            <p class="muted">category_finder bu aralıktaki kategorileri tarar.</p>
+          </div>
+
+          <div class="card">
+            <div class="section-title">Gender Değerleri</div>
+            <label for="genders">Gender listesi (virgülle ayır)</label>
+            <input
+              type="text"
+              id="genders"
+              name="genders"
+              value="{{ config.genders | join(',') }}"
+            />
+            <p class="muted">Örnek: <code>1,2,3,12</code>. Her (kategori, gender) çifti ayrı ayrı sorgulanır.</p>
+          </div>
+
+          <div class="card">
+            <div class="section-title">Patent Worker Ayarları</div>
+            <label for="num_workers">Açılacak tarayıcı (worker) sayısı</label>
+            <input
+              type="number"
+              id="num_workers"
+              name="num_workers"
+              value="{{ config.num_workers }}"
+              min="1"
+              max="20"
+            />
+
+            <label for="update_interval" style="margin-top: 8px;">Excel kayıt aralığı</label>
+            <input
+              type="number"
+              id="update_interval"
+              name="update_interval"
+              value="{{ config.update_interval }}"
+              min="1"
+            />
+            <p class="muted">Kaç marka sorgusunda bir <code>output.xlsx</code> güncellensin.</p>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px;">
+          <button class="btn btn-primary" type="submit">Ayarları Kaydet</button>
+        </div>
+      </form>
+
+      <hr style="border-color: #111827; margin: 24px 0;" />
+
+      <div class="grid">
+        <div class="card">
+          <div class="section-title">category_finder.py</div>
+          <p class="muted">
+            Kategori + gender kombinasyonlarını Trendyol’dan kontrol eder ve
+            <code>cache/categories_with_products.txt</code> dosyasına yazar.
+          </p>
+          <p>
+            Durum:
+            {% if category_running %}
+              <span class="status-badge status-running">Çalışıyor</span>
+            {% else %}
+              <span class="status-badge status-idle">Beklemede</span>
+            {% endif %}
+          </p>
+          <p class="muted" id="category-progress-text">İlerleme bilgisi yükleniyor…</p>
+          <div class="progress-shell">
+            <div class="progress-bar" id="category-progress-bar"></div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="run_category" />
+              <button class="btn btn-secondary" type="submit" {% if category_running %}disabled{% endif %}>
+                Başlat
+              </button>
+            </form>
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="stop_category" />
+              <button class="btn btn-danger" type="submit" {% if not category_running %}disabled{% endif %}>
+                Durdur
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">patent_worker.py</div>
+          <p class="muted">
+            Kategori + gender kombinasyonları için markaları toplar ve Türk Patent’te marka
+            tescil kontrolü yapar, sonucu <code>output.xlsx</code> dosyasına yazar.
+          </p>
+          <p>
+            Durum:
+            {% if patent_running %}
+              <span class="status-badge status-running">Çalışıyor</span>
+            {% else %}
+              <span class="status-badge status-idle">Beklemede</span>
+            {% endif %}
+          </p>
+          <p class="muted" id="patent-progress-text">İlerleme bilgisi yükleniyor…</p>
+          <div class="progress-shell">
+            <div class="progress-bar" id="patent-progress-bar"></div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="run_patent" />
+              <button class="btn btn-secondary" type="submit" {% if patent_running %}disabled{% endif %}>
+                Başlat
+              </button>
+            </form>
+            <form method="post" style="margin: 0;">
+              <input type="hidden" name="action" value="stop_patent" />
+              <button class="btn btn-danger" type="submit" {% if not patent_running %}disabled{% endif %}>
+                Durdur
+              </button>
+            </form>
+          </div>
+          <div style="margin-top: 8px;">
+            <a href="{{ url_for('download_output') }}" class="btn btn-secondary" style="text-decoration: none;">
+              output.xlsx'i indir
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border-color: #111827; margin: 24px 0;" />
+
+      <div class="grid">
+        <div class="card">
+          <div class="section-title">Canlı Log - category_finder</div>
+          <pre class="log-viewer" id="log-category">Yükleniyor…</pre>
+        </div>
+        <div class="card">
+          <div class="section-title">Canlı Log - patent_worker</div>
+          <pre class="log-viewer" id="log-patent">Yükleniyor…</pre>
+        </div>
+      </div>
+    </div>
+    <script>
+      async function refreshStatus() {
+        try {
+          const res = await fetch("{{ url_for('status') }}");
+          if (!res.ok) return;
+          const data = await res.json();
+
+          const cat = data.category || {};
+          const pat = data.patent || {};
+          updateButtons({ category: cat.running, patent: pat.running });
+
+          const errDiv = document.getElementById("last-errors");
+          if (errDiv) {
+            const msgs = [];
+            if (cat.last_error) msgs.push("category_finder: " + cat.last_error);
+            if (pat.last_error) msgs.push("patent_worker: " + pat.last_error);
+            errDiv.innerHTML = msgs.length ? msgs.join("<br>") : "";
+            errDiv.style.display = msgs.length ? "block" : "none";
+          }
+
+          const catProg = cat.progress || {};
+          const patProg = pat.progress || {};
+
+          const catText = document.getElementById("category-progress-text");
+          const catBar = document.getElementById("category-progress-bar");
+          const patText = document.getElementById("patent-progress-text");
+          const patBar = document.getElementById("patent-progress-bar");
+
+          if (catProg.start !== null && catProg.end !== null) {
+            const total = Math.max(0, catProg.end - catProg.start);
+            const completed = catProg.completed || 0;
+            const pct = total ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+            catText.textContent =
+              "Tarama: " +
+              (completed || 0) +
+              " / " +
+              (total || 0) +
+              " kategori, bulunan çift: " +
+              (catProg.found_count || 0);
+            catBar.style.width = pct + "%";
+          } else {
+            catText.textContent = "Henüz çalıştırılmadı.";
+            catBar.style.width = "0%";
+          }
+
+          if (patProg.total_pairs || patProg.processed_pairs || patProg.total_brands || patProg.processed_brands) {
+            const pairTotal = patProg.total_pairs || 0;
+            const pairDone = patProg.processed_pairs || 0;
+            const pairPct = pairTotal ? Math.min(100, Math.round((pairDone / pairTotal) * 100)) : 0;
+
+            const brandTotal = patProg.total_brands || 0;
+            const brandDone = patProg.processed_brands || 0;
+
+            patText.textContent =
+              "Kategoriler: " +
+              pairDone +
+              " / " +
+              pairTotal +
+              " | Markalar: " +
+              brandDone +
+              (brandTotal ? " / " + brandTotal : "");
+            patBar.style.width = pairPct + "%";
+          } else {
+            patText.textContent = "Henüz çalıştırılmadı.";
+            patBar.style.width = "0%";
+          }
+        } catch (e) {
+          // sessizce yut
+        }
+      }
+
+      async function refreshLogs() {
+        try {
+          const res = await fetch("{{ url_for('logs') }}");
+          if (!res.ok) return;
+          const data = await res.json();
+
+          const catLogEl = document.getElementById("log-category");
+          const patLogEl = document.getElementById("log-patent");
+
+          const catLines = data.category || [];
+          const patLines = data.patent || [];
+
+          catLogEl.textContent = catLines.length ? catLines.join("\\n") : "Henüz log yok.";
+          patLogEl.textContent = patLines.length ? patLines.join("\\n") : "Henüz log yok.";
+        } catch (e) {
+          // sessizce yut
+        }
+      }
+
+      function startPolling() {
+        refreshStatus();
+        refreshLogs();
+        setInterval(refreshStatus, 4000);
+        setInterval(refreshLogs, 5000);
+      }
+
+      function updateButtons(running) {
+        const catStart = document.querySelector('form input[value="run_category"]')?.closest('form')?.querySelector('button');
+        const catStop = document.querySelector('form input[value="stop_category"]')?.closest('form')?.querySelector('button');
+        const patStart = document.querySelector('form input[value="run_patent"]')?.closest('form')?.querySelector('button');
+        const patStop = document.querySelector('form input[value="stop_patent"]')?.closest('form')?.querySelector('button');
+
+        if (catStart) catStart.disabled = running.category;
+        if (catStop) catStop.disabled = !running.category;
+        if (patStart) patStart.disabled = running.patent;
+        if (patStop) patStop.disabled = !running.patent;
+      }
+
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        startPolling();
+      } else {
+        document.addEventListener("DOMContentLoaded", startPolling);
+      }
+    </script>
+  </body>
+</html>
+
