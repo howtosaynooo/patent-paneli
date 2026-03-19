@@ -200,6 +200,10 @@
           Çıktı dosyası:
           {% if has_excel %}output.xlsx hazır{% else %}henüz oluşturulmadı{% endif %}
         </span>
+        <span class="pill {% if has_tescilsiz %}pill-ok{% else %}pill-muted{% endif %}">
+          Tescilsiz:
+          {% if has_tescilsiz %}Tescilsiz.xlsx hazır{% else %}henüz oluşturulmadı{% endif %}
+        </span>
       </div>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -348,9 +352,12 @@
               </button>
             </form>
           </div>
-          <div style="margin-top: 8px;">
+          <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
             <a href="{{ url_for('download_output') }}" class="btn btn-secondary" style="text-decoration: none;">
               output.xlsx'i indir
+            </a>
+            <a href="{{ url_for('download_tescilsiz') }}" class="btn btn-secondary" style="text-decoration: none;">
+              Tescilsiz.xlsx'i indir
             </a>
           </div>
         </div>

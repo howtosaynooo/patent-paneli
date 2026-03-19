@@ -11,6 +11,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 OUTPUT_EXCEL = os.path.join(BASE_DIR, "output.xlsx")
+TESCILSIZ_EXCEL = os.path.join(BASE_DIR, "Tescilsiz.xlsx")
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -186,6 +187,7 @@ def index():
     # Basit health bilgileri
     gecko_ok = bool(shutil.which("geckodriver")) if hasattr(shutil, "which") else False
     has_excel = os.path.exists(OUTPUT_EXCEL)
+    has_tescilsiz = os.path.exists(TESCILSIZ_EXCEL)
 
     return render_template(
         "panel.html",
@@ -194,6 +196,7 @@ def index():
         patent_running=patent_running,
         gecko_ok=gecko_ok,
         has_excel=has_excel,
+        has_tescilsiz=has_tescilsiz,
         category_last_error=category_last_error,
         patent_last_error=patent_last_error,
     )
@@ -248,6 +251,14 @@ def download_output():
         flash("Henüz output.xlsx oluşturulmadı.", "error")
         return redirect(url_for("index"))
     return send_file(OUTPUT_EXCEL, as_attachment=True)
+
+
+@app.route("/download/Tescilsiz.xlsx")
+def download_tescilsiz():
+    if not os.path.exists(TESCILSIZ_EXCEL):
+        flash("Henüz Tescilsiz.xlsx oluşturulmadı.", "error")
+        return redirect(url_for("index"))
+    return send_file(TESCILSIZ_EXCEL, as_attachment=True)
 
 
 if __name__ == "__main__":
