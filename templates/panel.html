@@ -179,7 +179,10 @@
   </head>
   <body>
     <div class="container">
-      <h1>Patent Çalıştırma Paneli</h1>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <h1 style="margin: 0;">Patent Çalıştırma Paneli</h1>
+        <a href="{{ url_for('logout') }}" style="font-size: 13px; color: #6b7280; text-decoration: none;">Çıkış Yap</a>
+      </div>
       <p class="muted">
         Trendyol kategori + gender taraması ve Türk Patent marka sorgusunu bu panelden yönetebilirsin.
         <strong>Panelin çalışması için adres çubuğunda http://127.0.0.1:5000 olmalı</strong> — HTML dosyasını doğrudan açmak işe yaramaz.

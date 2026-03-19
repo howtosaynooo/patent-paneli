@@ -4,7 +4,9 @@ import shutil
 import threading
 from typing import Any, Dict
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from functools import wraps
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,8 +58,39 @@ def read_log_tail(path: str, max_lines: int = 50) -> list[str]:
     return [line.rstrip("\n") for line in lines[-max_lines:]]
 
 
+USERNAME = "admin"
+PASSWORD = "markaprog.1"
+
 app = Flask(__name__)
-app.secret_key = "change-this-in-production"
+app.secret_key = "mk-panel-s3cr3t-2024"
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("logged_in"):
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        if request.form.get("username") == USERNAME and request.form.get("password") == PASSWORD:
+            session["logged_in"] = True
+            return redirect(url_for("index"))
+        error = "Kullanıcı adı veya şifre hatalı."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 category_thread: threading.Thread | None = None
@@ -167,6 +200,7 @@ def run_eleyici():
 
 
 @app.route("/", methods=["GET", "POST"])
+@login_required
 def index():
     global category_thread, patent_thread, eleyici_thread, tescilsiz_thread, category_running, patent_running, eleyici_running, tescilsiz_running
     cfg = load_config()
@@ -294,6 +328,7 @@ def index():
 
 
 @app.route("/status")
+@login_required
 def status():
     try:
         import category_finder as cf
@@ -349,6 +384,7 @@ def status():
 
 
 @app.route("/logs")
+@login_required
 def logs():
     category_log = read_log_tail(os.path.join(LOGS_DIR, "category_finder.log"), max_lines=80)
     patent_log = read_log_tail(os.path.join(LOGS_DIR, "patent_worker.log"), max_lines=80)
@@ -365,6 +401,7 @@ def logs():
 
 
 @app.route("/download/output.xlsx")
+@login_required
 def download_output():
     if not os.path.exists(OUTPUT_EXCEL):
         flash("Henüz output.xlsx oluşturulmadı.", "error")
@@ -373,6 +410,7 @@ def download_output():
 
 
 @app.route("/download/Tescilsiz.xlsx")
+@login_required
 def download_tescilsiz():
     if not os.path.exists(TESCILSIZ_EXCEL):
         flash("Henüz Tescilsiz.xlsx oluşturulmadı.", "error")
@@ -381,6 +419,7 @@ def download_tescilsiz():
 
 
 @app.route("/download/elenmis.xlsx")
+@login_required
 def download_elenmis():
     if not os.path.exists(ELENMIS_EXCEL):
         flash("Henüz elenmis.xlsx oluşturulmadı.", "error")
